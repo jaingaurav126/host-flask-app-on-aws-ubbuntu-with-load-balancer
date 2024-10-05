@@ -1,0 +1,178 @@
+a) Check if Python 3 is available:
+python3 --version
+
+
+b) Set up Python alias:
+sudo ln -s /usr/bin/python3 /usr/bin/python
+
+Now, you should be able to use python as a command.
+
+c)Install pip: If pip is not installed, install it using:
+sudo dnf install python3-pip
+
+d)Check if pip works
+python --version
+pip --version
+
+
+e) Install Apache and mod_wsgi:
+sudo yum update -y   # For Amazon Linux
+sudo yum install httpd mod_wsgi python3 -y
+
+
+
+sudo yum groupinstall "Development Tools"
+sudo yum install httpd httpd-devel python3 python3-devel gcc
+
+
+Download and Build mod_wsgi: Download the latest version of mod_wsgi and compile it.
+wget https://github.com/GrahamDumpleton/mod_wsgi/archive/4.9.4.tar.gz
+tar -xvzf 4.9.4.tar.gz
+cd mod_wsgi-4.9.4
+./configure --with-python=/usr/bin/python3
+make
+sudo make install
+
+Configure Apache to Load mod_wsgi:
+sudo vi /etc/httpd/conf/httpd.conf
+LoadModule wsgi_module modules/mod_wsgi.so
+
+sudo systemctl restart httpd
+
+
+sudo journalctl -xeu httpd.service
+sudo systemctl status httpd
+
+
+
+f)Install Flask:
+sudo pip3 install Flask
+
+
+g) Create a Sample Flask App:
+sudo mkdir -p /var/www/html
+sudo mkdir /var/www/html/flaskapp
+
+h)Create a directory for your app:
+sudo mkdir /var/www/html/flaskapp
+cd /var/www/html/flaskapp
+
+create app.py
+sudo vim app.py
+
+i)Create the app.py file for your Flask app:
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def hello_world():
+    return 'Hello, this is your Flask app running on EC2!'
+
+if __name__ == '__main__':
+    app.run()
+
+
+
+j) Configure Apache to serve the Flask app:
+
+incase services not found
+sudo yum install httpd
+
+create the httpd directory first 
+sudo mkdir -p /var/www/html
+sudo mkdir -p /etc/httpd/conf.d
+
+
+sudo vim /etc/httpd/conf.d/flaskapp.conf
+
+<VirtualHost *:80>
+    ServerName <EC2-Public-IP>
+
+    WSGIDaemonProcess flaskapp threads=5
+    WSGIScriptAlias / /var/www/html/flaskapp/flaskapp.wsgi
+
+    <Directory /var/www/html/flaskapp>
+        WSGIProcessGroup flaskapp
+        WSGIApplicationGroup %{GLOBAL}
+        Require all granted
+    </Directory>
+
+    ErrorLog /var/log/httpd/flaskapp-error.log
+    CustomLog /var/log/httpd/flaskapp-access.log combined
+</VirtualHost>
+
+k) Create the WSGI File:
+
+  1)Create the flaskapp.wsgi file:
+    sudo vim /var/www/html/flaskapp/flaskapp.wsgi
+
+  2) Add the following content:
+import sys
+sys.path.insert(0, '/var/www/html/flaskapp')
+
+from app import app as application
+
+l)Start the Apache Service:
+sudo systemctl start httpd
+sudo systemctl enable httpd
+
+
+
+m)Test your Flask App:
+
+Visit the EC2 instance’s public IP in a browser (http://<EC2-Public-IP>)
+
+
+Load Balancer
+
+Create an Elastic Load Balancer (ELB)
+Goal: Distribute incoming traffic across multiple instances.
+Steps:
+
+Go to the EC2 Dashboard > Load Balancers.
+
+Click Create Load Balancer and select Application Load Balancer.
+
+Name: Enter a name (e.g., flask-alb).
+
+Scheme: Choose Internet-facing.
+
+Listener: Use HTTP (port 80).
+
+Availability Zones: Select at least two availability zones to ensure high availability.
+
+Security Groups: Allow HTTP (port 80) for the load balancer.
+
+Target Group:
+
+Create a new target group for the EC2 instances (e.g., flask-target-group).
+Choose the target type as Instances.
+Health Check Path: Set to /.
+Register the EC2 instance: Add the existing EC2 instance to the target group.
+
+5. Create an Auto Scaling Group (ASG)
+Goal: Automatically scale the number of instances based on traffic.
+Steps:
+
+Go to the EC2 Dashboard > Auto Scaling Groups.
+
+Click Create Auto Scaling Group.
+
+Name: Enter a name (e.g., flask-asg).
+
+Launch Template: Create a new launch template:
+
+Use the existing EC2 instance's configuration.
+Specify the AMI ID of the EC2 instance, instance type (t2.micro), and key pair.
+Network: Select the same VPC and subnets as the EC2 instance.
+
+Load Balancer Integration: Attach the previously created ELB to the Auto Scaling Group.
+
+Scaling Policies: Configure the scaling policy to add or remove instances based on CPU utilization:
+
+Example: Add an instance if average CPU utilization > 60% for 5 minutes.
+Remove an instance if CPU utilization < 30%.
+Launch the Auto Scaling Group.
+
+6. Simulate Traffic Spike to Test Auto Scaling
+
